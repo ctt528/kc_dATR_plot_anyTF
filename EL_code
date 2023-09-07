@@ -1,0 +1,219 @@
+Using tsdata.marketdata;
+Using elsystem;
+using elsystem.collections;
+using elsystem.drawingobjects;
+	
+
+
+
+input: time_start (0700),
+	//string symboll ("@gc"),
+	ATRLength ( 14 );
+vars: vwap(0),
+pv(0),
+Totalvolume(0),
+Barfromstart(0),
+Squareddeviations(0),
+Probabilityweighteddeviations(0),
+deviationsum(0),
+
+standarddeviation(0),
+OncePerDay(0),
+ii(0),
+PriceSeriesProvider PSP(NULL),
+double TH (0),
+double TL (0),
+double TR (0),
+int ATRCounter (0),
+double SumTR (0),
+DateTime Firstdatetime (null),
+xx (0),
+
+
+DailybarH (0),
+DailyBarL (0),
+DailyC (0),
+Datetime Value1(null),
+AvgTR(0),
+
+Horizontalline MyHorizontalline1(null),
+Horizontalline MyHorizontalline2(null),
+double HlinePrice1(0),
+double HlinePrice2(0),
+VerticalLine MyVerticalline1 (null),
+dtpoint Vlineprice1(null);
+
+arrays:
+	datearray[] (0);
+	
+method override void InitializeComponent()
+begin
+		PSP = new PriceSeriesProvider;
+		
+		psp.Updated += psp_updated;
+		//---------------------------
+		//psp
+		//---------------------------
+		PSP.Symbol = Symbol;
+		PSP.Interval.ChartType = DataChartType.Bars;
+		PSP.Interval.IntervalType = DataIntervalType.Daily;
+		PSP.Interval.IntervalSpan = 1;
+		PSP.Interval.Name = "(Unknown name)";
+		//PSP.Range.Type = DataRangeType.Date;
+		Firstdatetime = BarDatetime;
+		Firstdatetime.adddays( -AtrLength - 2);
+		PSP.Range.FirstDate = firstdatetime;
+		//Print( D, T, "Bardatetime", Bardatetime.tostring(), "Maxbarsback", Maxbarsback);
+		PSP.Range.Name = "(Unknown name)";
+		PSP.IncludeVolumeInfo = false;
+		PSP.IncludeTicksInfo = false;
+		PSP.UseNaturalHours = false;
+		PSP.Realtime = true;
+		PSP.TimeZone = tsdata.common.TimeZone.local;
+		If Analysistechnique.Datastreams.stream[Datanum].timezone = tsdata.common.timezone.exchange
+		then PSP.TimeZone = tsdata.common.timezone.exchange else PSP.timezone = tsdata.common.timezone.Local; //making it work on exchange or local time
+		PSP.Load = true;
+		PSP.Name = "PSP";
+end;
+
+
+
+method void PSP_Updated( elsystem.Object sender, PriceSeriesUpdatedEventArgs args ) 
+begin
+
+end;
+
+If date[0] > date[1] then OncePerDay = 0 ;
+If {Time >= time_start and} OncePerDay = 0 then 
+begin
+	OncePerDay = 1 ;
+	
+	Barfromstart=0;
+	pv=AvgPrice*volume;
+	Totalvolume=volume;
+	vwap=iff(totalvolume <> 0, (pv/totalvolume), 1);
+	end
+	else
+	begin
+	Barfromstart=Barfromstart[1]+1;
+	pv=pv[1] + AvgPrice*Volume;
+	Totalvolume=Totalvolume[1] + Volume;
+	vwap=iff(totalvolume <> 0, (pv/Totalvolume), 1);
+	end;
+	deviationsum=0;
+	for xx = 0 to Barfromstart
+	begin
+	Squareddeviations=Square( vwap-avgprice[xx]);
+	Probabilityweighteddeviations=volume[xx]*(iff(Totalvolume <> 0, (Squareddeviations/Totalvolume), 1));
+	deviationsum=deviationsum +Probabilityweighteddeviations;
+End;	
+
+If time = 1600 then plot1(vwap);
+	
+	If time = 1600 and Drawingobjects.items[13].count <= 1 then 
+		Begin 
+		
+		If Drawingobjects.items[13].count > 1 then Begin 
+											Drawingobjects.Delete((DrawingObjects.items[13] astype Vector) [0] astype Drawingobject); 
+											End;
+				
+			Vlineprice1 = DTPoint.create(bardatetime, vwap);							
+			MyVerticalline1 = Verticalline.create(VlinePrice1);
+			MyVerticalline1.persist = False;
+			Drawingobjects.add(MyVerticalline1);
+			MyVerticalline1.color = elsystem.drawing.Color.gray;
+			MyVerticalline1.style = styletype.dotted;
+			MyVerticalline1.weight = 0; 
+			MyVerticalline1.Lock = True; 
+			
+			If Drawingobjects.items[13].count > 1 then Begin 
+											Drawingobjects.Delete((DrawingObjects.items[13] astype Vector) [0] astype Drawingobject); 
+											End;
+end;
+
+
+
+{If date[0] > date[1] then OncePerDay = 0 ;
+If Time >= time_start and OncePerDay = 0 then 
+begin
+	OncePerDay = 1 ;
+	
+	Barfromstart=0;
+	pv=AvgPrice*volume;
+	Totalvolume=volume;
+	vwap=iff(totalvolume <> 0, (pv/totalvolume), 1);
+	end
+	else
+	begin
+	Barfromstart=Barfromstart[1]+1;
+	pv=pv[1] + AvgPrice*Volume;
+	Totalvolume=Totalvolume[1] + Volume;
+	vwap=iff(totalvolume <> 0, (pv/Totalvolume), 1);
+	end;
+	deviationsum=0;
+	for xx = 0 to Barfromstart
+	begin
+	Squareddeviations=Square( vwap-avgprice[xx]);
+	Probabilityweighteddeviations=volume[xx]*(iff(Totalvolume <> 0, (Squareddeviations/Totalvolume), 1));
+	deviationsum=deviationsum +Probabilityweighteddeviations;
+end;}
+
+
+//Calculate ATR
+SumTR = 0;
+If PSP.Count >= 1 then 
+begin
+	If PSP.Count > ATRLength then 
+	Begin	
+		For ATRCounter = 0 to ATRLength - 1
+		Begin
+			DailybarH = PSP.High[ATRCounter];
+			DailyBarL = PSP.Low[ATRCounter];
+			DailyC = PSP.Close[ATRCounter + 1];
+			//TH
+			If DailyC > DailyBarH then TH = DailyC else TH = DailybarH;
+			//TL
+			If DailyC < DailyBarL then TL = DailyC else TL = DailybarL;
+			//TR
+			TR = TH - TL;
+			SumTR = TR + SumTR;
+		End;
+		AvgTR = SumTR / ATRLength;
+	End;
+end;
+Hlineprice1 = Vwap + avgtr;
+Hlineprice2 = Vwap - avgtr;
+print("Vwap:    ", Vwap, "   AvgTR:  ", avgtr);
+
+If PSP.count > ATRLength and Drawingobjects.items[10].count <= 2 then 
+Begin 
+
+If Drawingobjects.items[10].count > 2 then Begin 
+									Drawingobjects.Delete((DrawingObjects.items[10] astype Vector) [0] astype Drawingobject); 
+									End;
+									
+	MyHorizontalline1 = Horizontalline.create(HlinePrice1);
+	MyHorizontalline1.persist = False;
+	Drawingobjects.add(MyHorizontalline1);
+	MyHorizontalline1.color = elsystem.drawing.Color.gray;
+	MyHorizontalline1.style = styletype.dotted;
+	MyHorizontalline1.weight = 0; 
+	MyHorizontalline1.Lock = True; 
+	
+	If Drawingobjects.items[10].count > 2 then Begin 
+									Drawingobjects.Delete((DrawingObjects.items[10] astype Vector) [0] astype Drawingobject); 
+									End;
+	
+	MyHorizontalline2 = Horizontalline.create(HlinePrice2);
+	MyHorizontalline2.persist = False;
+	Drawingobjects.add(MyHorizontalline2);
+	MyHorizontalline2.color = elsystem.drawing.Color.gray;
+	MyHorizontalline2.style = styletype.dotted;
+	MyHorizontalline2.weight = 0;
+	MyHorizontalline2.Lock = True;
+	
+	If Drawingobjects.items[10].count > 2 then Begin 
+									Drawingobjects.Delete((DrawingObjects.items[10] astype Vector) [0] astype Drawingobject); 
+									End;
+									
+end; 
